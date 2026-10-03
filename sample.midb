@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1756881201234.567,
+    "name": "项目名称",
+    "type": "string",
+    "value": "数据管理系统"
+  },
+  {
+    "id": 1756881201250.123,
+    "name": "版本号",
+    "type": "number",
+    "value": 1.2
+  },
+  {
+    "id": 1756881201265.789,
+    "name": "是否开源",
+    "type": "boolean",
+    "value": true
+  },
+  {
+    "id": 1756881201280.345,
+    "name": "作者",
+    "type": "string",
+    "value": "Dong Xiang"
+  },
+  {
+    "id": 1756881201290.999,
+    "name": "最大连接数",
+    "type": "number",
+    "value": 100
+  },
+  {
+    "id": 1756881201300.444,
+    "name": "是否启用缓存",
+    "type": "boolean",
+    "value": false
+  }
+]

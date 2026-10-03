@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>MIDB数据管理系统</title>
+    <link rel="icon" href="./favicon.ico" type="image/x-icon">
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: system-ui, sans-serif;
+        }
+        body {
+            max-width: 1000px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        .card {
+            background: #f9f9f9;
+            padding: 24px;
+            border-radius: 12px;
+        }
+        .form-item {
+            margin-bottom:16px;
+        }
+        label{
+            display:block;
+            margin-bottom:6px;
+        }
+        input, select{
+            width:100%;
+            padding:10px;
+            border:1px solid #ddd;
+            border-radius:6px;
+            font-size:16px;
+        }
+        .checkbox-row{
+            display:flex;
+            gap:8px;
+            align-items:center;
+            margin:12px 0;
+        }
+        .checkbox-row input{
+            width:auto;
+        }
+        .btn-group{
+            display:flex;
+            gap:10px;
+            margin-top:20px;
+            flex-wrap:wrap;
+        }
+        button{
+            padding:10px 20px;
+            border:none;
+            border-radius:6px;
+            font-size:16px;
+            cursor:pointer;
+        }
+        .btn-add{background:#28a745;color:white;}
+        .btn-clear{background:#6c757d;color:white;}
+        .btn-export{background:#0069ff;color:white;}
+        .btn-import{background:#ff7800;color:white;}
+        .btn-edit{background:#2399d9;color:white;}
+        .btn-del{background:#dc3545;color:white;}
+        table{
+            width:100%;
+            border-collapse: collapse;
+            margin-top:20px;
+        }
+        th,td{
+            border:1px solid #ddd;
+            padding:10px;
+            text-align:left;
+        }
+        th{background:#eee;}
+        .status-tip{
+            padding:12px;
+            border-radius:8px;
+            margin:16px 0;
+        }
+        .success{background:#dcf7dd;color:#157024;}
+        .info{background:#e8f4ff;color:#194f85;}
+        .error{background:#ffe8e8;color:#991b1b;}
+        .copyright{
+            text-align:center;
+            margin-top:30px;
+            color:#666;
+            font-size:14px;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align:center; position: relative;">MIDB 数据管理系统</h1>
+    <div class="card">
+        <div class="form-item">
+            <label>数据名称:</label>
+            <input id="input-name" placeholder="请输入数据名称">
+        </div>
+        <div class="form-item">
+            <label>数据类型:</label>
+            <select id="select-type">
+                <option value="string">字符串 string</option>
+                <option value="number">数字 number</option>
+                <option value="boolean">布尔 boolean</option>
+            </select>
+        </div>
+        <div class="form-item">
+            <label>数据值:</label>
+            <!-- 动态容器，用来放不同类型输入控件 -->
+            <div id="value-container"></div>
+        </div>
+        <div class="checkbox-row">
+            <input type="checkbox" id="check-null-constraint">
+            <label for="check-null-constraint">启用非空约束（开启后，所有数据值不允许为空）</label>
+        </div>
+        <div class="checkbox-row">
+            <input type="checkbox" id="check-same-type">
+            <label for="check-same-type">要求所有数据类型统一（仅无数据时可勾选，添加第一条数据后锁定类型）</label>
+        </div>
+        <div class="btn-group">
+            <button class="btn-add" id="btn-add">添加数据</button>
+            <button class="btn-clear" id="btn-clear">清空数据</button>
+            <button class="btn-export" id="btn-export">导出数据 (.midb)</button>
+            <button class="btn-import" id="btn-import">导入数据 (.midb)</button>
+            <input type="file" id="file-input" accept=".midb" style="display:none;">
+        </div>
+    </div>
+    <div id="status-box"></div>
+    <h2>数据列表</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>序号</th>
+                <th>名称</th>
+                <th>类型</th>
+                <th>值</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+    </table>
+    <!-- 修改后的版权声明，兼容MIT协议 -->
+<div class="copyright" style="position: fixed; bottom: 0; left: 0; width: 100%; padding: 10px; text-align: center; background: #fff; z-index: 999;">Copyright © 2026 Dong Xiang，本项目采用 MIT 协议开源</div>
+
+<script>
+// ==========全局变量==========
+let dataList = [];
+let baseType = null;
+let enableNonNull = false;
+const dataTableBody = document.querySelector("#table-body");
+const inputName = document.getElementById("input-name");
+const selectType = document.getElementById("select-type");
+const valueContainer = document.getElementById("value-container");
+const btnAdd = document.getElementById("btn-add");
+const btnClear = document.getElementById("btn-clear");
+const btnExport = document.getElementById("btn-export");
+const btnImport = document.getElementById("btn-import");
+const fileInput = document.getElementById("file-input");
+const checkNullConstraint = document.getElementById("check-null-constraint");
+const checkSameType = document.getElementById("check-same-type");
+const statusBox = document.getElementById("status-box");
+// ==========状态提示==========
+function showStatus(text, type="success"){
+    statusBox.innerHTML = `<div class="status-tip ${type}">${text}</div>`;
+    setTimeout(()=> statusBox.innerHTML = "", 3000);
+}
+// ==========本地存储==========
+function saveData(){
+    localStorage.setItem("dataManagementSystemData", JSON.stringify(dataList));
+}
+function loadData(){
+    const raw = localStorage.getItem("dataManagementSystemData");
+    if(raw){
+        dataList = JSON.parse(raw);
+    }
+    renderTable();
+    updateSameTypeCheckboxState();
+    updateTypeSelectState();
+    renderValueInput();
+}
+// 根据类型渲染对应的输入组件
+function renderValueInput(defaultVal=""){
+    const type = selectType.value;
+    if(type === "string"){
+        valueContainer.innerHTML = `<input id="input-value" type="text" placeholder="输入字符串" value="${defaultVal}">`;
+    }else if(type === "number"){
+        // 限制只能输入数字、小数点、负号，字母无法键入
+        valueContainer.innerHTML = `<input id="input-value" type="number" placeholder="输入数字" value="${defaultVal}" onkeydown="return /[0-9.\-]/i.test(event.key) || ['Backspace','Delete','ArrowLeft','ArrowRight','Tab'].includes(event.key)">`;
+    }else if(type === "boolean"){
+        valueContainer.innerHTML = `
+            <select id="input-value">
+                <option value="true" ${defaultVal===true ? "selected":""}>true</option>
+                <option value="false" ${defaultVal===false ? "selected":""}>false</option>
+            </select>`;
+    }
+}
+// 获取当前输入控件的值
+function getCurrentValue(){
+    const el = document.getElementById("input-value");
+    const type = selectType.value;
+    if(type === "string") return el.value;
+    if(type === "number") return Number(el.value);
+    if(type === "boolean") return el.value === "true";
+}
+// 监听类型下拉切换，自动更换输入框
+selectType.addEventListener("change", ()=>{
+    renderValueInput();
+});
+/**
+ * 类型校验函数
+ * @param {string} type string / number / boolean
+ * @param {any} value
+ * @returns { {ok:boolean, realVal:any, msg:string} }
+ */
+function validateType(type, value){
+    if(type === "string"){
+        return { ok:true, realVal: value, msg:"" };
+    }
+    if(type === "number"){
+        if(isNaN(value)){
+            return { ok:false, realVal:null, msg:"类型校验失败：number类型必须输入有效数字" };
+        }
+        return { ok:true, realVal: value, msg:"" };
+    }
+    if(type === "boolean"){
+        if(typeof value !== "boolean"){
+            return { ok:false, realVal:null, msg:"类型校验失败：boolean只能是true/false" };
+        }
+        return { ok:true, realVal: value, msg:"" };
+    }
+    return { ok:true, realVal:value, msg:"" };
+}
+// ==========渲染表格==========
+function renderTable() {
+    dataTableBody.innerHTML = "";
+    dataList.forEach(function (data, index) {
+        const type = data.type ?? "unknown";
+        const val = data.value ?? "";
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${data.name}</td>
+            <td>${type}</td>
+            <td>${val}</td>
+            <td>
+                <button class="btn-edit edit-btn">编辑</button>
+                <button class="btn-del delete-btn">删除</button>
+            </td>
+        `;
+        tr.querySelector(".edit-btn").onclick = () => openEditModal(data);
+        tr.querySelector(".delete-btn").onclick = () => {
+            if (confirm(`确定删除【${data.name}】吗？`)) {
+                dataList = dataList.filter(x => x.id !== data.id);
+                if (dataList.length === 0) {
+                    baseType = null;
+                    checkSameType.disabled = false;
+                }
+                renderTable();
+                updateSameTypeCheckboxState();
+                updateTypeSelectState();
+                saveData();
+                showStatus("已删除", "success");
+            }
+        };
+        dataTableBody.appendChild(tr);
+    });
+}
+// ==========编辑弹窗【已修复】==========
+function openEditModal(item){
+    const newName = prompt("修改名称", item.name);
+    if(newName === null) return;
+    if(!newName.trim()){
+        showStatus("名称不能为空！","error");
+        return;
+    }
+    let newValRaw = prompt("修改数据值", item.value);
+    if(newValRaw === null) return;
+    let parsedVal;
+    if(item.type === "number"){
+        parsedVal = Number(newValRaw);
+    }else if(item.type === "boolean"){
+        parsedVal = newValRaw.toLowerCase() === "true";
+    }else{
+        parsedVal = newValRaw;
+    }
+    // 类型校验
+    const res = validateType(item.type, parsedVal);
+    if(!res.ok){
+        showStatus(res.msg, "error");
+        return;
+    }
+    // 非空约束校验
+    if(enableNonNull){
+        if(parsedVal === '' || parsedVal === null || parsedVal === undefined){
+            showStatus("⚠️ 非空约束已开启，数据值不能为空！","error");
+            return;
+        }
+    }
+    item.name = newName.trim();
+    item.value = res.realVal;
+    saveData();
+    renderTable();
+    showStatus("修改成功", "success");
+}
+// ==========类型统一复选框状态更新==========
+function updateSameTypeCheckboxState(){
+    if(dataList.length > 0){
+        checkSameType.disabled = true;
+    }else{
+        checkSameType.disabled = false;
+    }
+}
+function updateTypeSelectState(){
+    if(checkSameType.checked && baseType){
+        selectType.value = baseType;
+        selectType.disabled = true;
+    }else{
+        selectType.disabled = false;
+    }
+    renderValueInput();
+}
+// ==========【非空约束勾选事件：检测存量空数据，填充默认值】==========
+checkNullConstraint.addEventListener('change', function() {
+    if (this.checked) {
+        const emptyItems = dataList.filter(item => {
+            const v = item.value;
+            return v === '' || v === null || v === undefined;
+        });
+        if (emptyItems.length > 0) {
+            const msg = `检测到已有 ${emptyItems.length} 条数据的值为空！\n开启非空约束不允许空值。\n请输入用来填充这些空条目的默认值：`;
+            let defaultVal = prompt(msg, "");
+            while(true){
+                if(defaultVal === null){
+                    // 用户点取消
+                    this.checked = false;
+                    return;
+                }
+                const valTrim = defaultVal.trim();
+                if(valTrim !== ""){
+                    break;
+                }
+                alert("默认值不能全为空白，请输入有效值！");
+                defaultVal = prompt(msg, "");
+            }
+            dataList.forEach(item => {
+                if(item.value === '' || item.value === null || item.value === undefined){
+                    item.value = defaultVal;
+                }
+            });
+            saveData();
+            renderTable();
+            showStatus(`已将${emptyItems.length}条空记录填充默认值【${defaultVal}】，已开启非空约束`,"success");
+        }else{
+            showStatus("成功开启非空约束","success");
+        }
+        enableNonNull = true;
+    }else{
+        enableNonNull = false;
+        showStatus("已关闭非空约束","info");
+    }
+});
+// ==========统一类型复选框==========
+checkSameType.onchange = function(){
+    if(this.checked){
+        baseType = selectType.value;
+        selectType.disabled = true;
+        renderValueInput();
+        showStatus(`已开启全局统一类型，固定为${baseType}`,"success");
+    }else{
+        baseType = null;
+        selectType.disabled = false;
+        renderValueInput();
+        showStatus("已关闭统一类型","info");
+    }
+}
+// ==========添加数据按钮【id修复】==========
+btnAdd.onclick = function(){
+    const name = inputName.value.trim();
+    let type = selectType.value;
+    let val = getCurrentValue();
+    let isValid = true;
+    if(!name){
+        showStatus("数据名称不能为空！","error");
+        return;
+    }
+    if(checkSameType.checked){
+        type = baseType;
+    }
+    if(enableNonNull){
+        if(val === '' || val === null || val === undefined){
+            showStatus("⚠️ 非空约束已开启，数据值不能为空！","error");
+            isValid = false;
+        }
+    }
+    if(!isValid) return;
+    const typeCheck = validateType(type, val);
+    if(!typeCheck.ok){
+        showStatus(typeCheck.msg, "error");
+        return;
+    }
+    const newItem = {
+        id: Date.now() + Math.random(),
+        name: name,
+        type: type,
+        value: typeCheck.realVal
+    };
+    dataList.push(newItem);
+    saveData();
+    renderTable();
+    updateSameTypeCheckboxState();
+    updateTypeSelectState();
+    //清空输入框
+    inputName.value = "";
+    renderValueInput("");
+    showStatus("数据已保存到本地", "success");
+}
+// ==========清空全部数据==========
+btnClear.onclick = function(){
+    if(!confirm("确定清空全部数据？不可恢复！"))return;
+    dataList = [];
+    baseType = null;
+    saveData();
+    renderTable();
+    updateSameTypeCheckboxState();
+    updateTypeSelectState();
+    showStatus("所有数据已清空", "info");
+}
+// ==========导出midb文件==========
+btnExport.onclick = function(){
+    const blob = new Blob([JSON.stringify(dataList,null,2)],{type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "data.midb";
+    a.click();      
+    URL.revokeObjectURL(url);
+}
+// ==========导入midb文件==========
+btnImport.onclick = function(){
+    fileInput.click();
+}
+fileInput.onchange = function(e){
+    const f = e.target.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+        try{
+            const imported = JSON.parse(ev.target.result);
+            dataList = imported;
+            saveData();
+            renderTable();
+            updateSameTypeCheckboxState();
+            updateTypeSelectState();
+            showStatus("导入成功！","success");
+        }catch(err){
+            showStatus("文件解析失败！","error");
+        }
+    }
+    reader.readAsText(f);
+}
+//初始化页面
+renderValueInput();
+loadData();
+</script>
+</body>
+</html>

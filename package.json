@@ -1,0 +1,23 @@
+{
+  "name": "midb-manager",
+  "version": "1.0.3",
+  "description": "轻量级数据管理系统",
+  "main": "index.html",
+  "scripts": {
+    "start": "node bin/cli.js",
+    "serve": "npx http-server . -p 8086 -o",
+    "dev": "npx live-server . --port=3000",
+    "test": "echo \"在浏览器中打开 index.html 进行测试\""
+  },
+  "bin": {
+    "midb-manager": "./bin/cli.js"
+  },
+  "keywords": [
+    "database",
+    "manager",
+    "midb",
+    "web-app"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
