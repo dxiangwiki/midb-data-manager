@@ -116,7 +116,7 @@ midb-manager/
 
 ## 📄 许可证
 
-MIT License © 2025 [董翔]
+MIT License © 2026 [董翔]
 
 ## 🤝 贡献
 
